@@ -3,6 +3,7 @@ from flask_restful import Api, Resource, reqparse
 from flask_cors import CORS
 import requests, os
 from dotenv import load_dotenv
+import uuid
 
 
 load_dotenv()
@@ -14,8 +15,6 @@ api = Api(app)
 API_KEY = os.getenv("GOOGLE_API_KEY")
 BASE_URL = "https://places.googleapis.com/v1"
 
-parser = reqparse.RequestParser()
-parser.add_argument("input", required=True)
 
 class Autocomplete(Resource):
     def get(self):
@@ -25,6 +24,11 @@ class Autocomplete(Resource):
 
         if not user_input or user_input.strip() == "":
             return {"error": "input required"}, 400
+        
+        session_token = request.args.get("sessionToken")
+
+        if not session_token:
+            session_token = str(uuid.uuid4())
         
         url = f"{BASE_URL}/places:autocomplete"
 
@@ -40,6 +44,7 @@ class Autocomplete(Resource):
 
         body = {
             "input": user_input,
+            "sessionToken": session_token
         }
 
         if lat and lng:
@@ -49,7 +54,7 @@ class Autocomplete(Resource):
                         "latitude": float(lat),
                         "longitude": float(lng)
                     },
-                    "radius": 5000
+                    "radius": 50000
                 }
             }
 
@@ -74,6 +79,31 @@ class Autocomplete(Resource):
 api.add_resource(Autocomplete, "/autocomplete")
 
 
+class PlaceDetails(Resource):
+    def get(self, place_id):
+        url = f"{BASE_URL}/places/{place_id}"
+
+        headers = {
+            "Content-Type": "application/json",
+            "X-Goog-Api-Key": API_KEY,
+            "X-Goog-FieldMask": (
+                "id,"
+                "displayName,"
+                "formattedAddress,"
+                "rating,"
+                "priceLevel,"
+                "types,"
+                "location"
+            )
+        }
+
+        res = requests.get(url, headers=headers)
+        data = res.json()
+
+        return data, 200
+
+api.add_resource(PlaceDetails, "/place/<string:place_id>")
+
 class Places(Resource):
     def get(self):
         location = request.args.get("location")
@@ -97,6 +127,7 @@ class Places(Resource):
 
         body = {
             "maxResultCount": 10,
+            "includedTypes": ["restaurant"],
             "locationRestriction": {
                 "circle": {
                     "center": {

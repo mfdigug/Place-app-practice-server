@@ -1,4 +1,4 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, make_response
 from flask_restful import Api, Resource, reqparse
 from flask_cors import CORS
 import requests, os
@@ -93,21 +93,68 @@ class PlaceDetails(Resource):
                 "rating,"
                 "priceLevel,"
                 "types,"
-                "location"
+                "location,"
+                "photos.name,"
+                "websiteUri,"
+                "googleMapsUri"
             )
         }
 
         res = requests.get(url, headers=headers)
         data = res.json()
 
-        return data, 200
+        
+
+        photos = data.get("photos", [])[:5]
+
+        print("PHOTOS:", data.get("photos"))
+
+        return {
+            "id": data.get("id"),
+            "name": data.get("displayName", {}).get("text"),
+            "address": data.get("formattedAddress"),
+            "rating": data.get("rating"),
+            "priceLevel": data.get("priceLevel"),
+            "types": data.get("types", []),
+            "photos": photos,
+            "website": data.get("websiteUri"),
+            "mapsLink": data.get("googleMapsUri"),
+        }, 200
 
 api.add_resource(PlaceDetails, "/place/<string:place_id>")
+
+class Photo(Resource):
+    def get(self, photo_name):
+        
+        try:
+            url = f"{BASE_URL}/{photo_name}/media"
+
+            print("PHOTO URL:", url)
+
+            params = {
+                "maxWidthPx": 400,
+                "key": API_KEY
+            }
+
+            res = requests.get(url, params=params, stream=True)
+
+            response = make_response(res.content)
+            response.headers.set("Content-Type", res.headers.get("Content-Type", "image/jpeg"))
+
+            return response
+        
+        except Exception as e:
+            print("PHOTO ERROR:", str(e))
+            return {"error": str(e)}, 500
+
+
+api.add_resource(Photo, "/photo/<path:photo_name>")
+
 
 class Places(Resource):
     def get(self):
         location = request.args.get("location")
-        keyword = request.args.get("keyword", "")
+        # keyword = request.args.get("keyword", "")
 
         if not location or location.strip() == "":
             return {"error": "location is required (lat,lng)"}, 400
